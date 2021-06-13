@@ -7,9 +7,9 @@ As told, I have used the following project [**DVA**](https://github.com/CSPF-Fou
 
 [**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **SonarQube Dashboard**.
 
-[**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **SAST Report**.
+[**Click Here**](https://raw.githubusercontent.com/dasgourav/devsecops-airbus/master/Reports/report-20210613184356.html) to open the **SAST Report**.
 
-[**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **DAST Report**.
+[**Click Here**](https://raw.githubusercontent.com/dasgourav/devsecops-airbus/master/Reports/1623610969.xhtml) to open the **DAST Report**.
 
 
 ## Objective:
@@ -18,6 +18,6 @@ Thus, the objective here is to demonstrate how to incorporate SAST, DAST and Cod
 ## How Does it Work:
 The tutorial has used open-source tools to build the DevSecOps pipeline to make the demo more achievable. The below diagram depicts the tools and native services used along with the security control gates applied in the process. Also, the reference diagram is provided below.
 
-![alt text](https://hackernoon.com/images/gv93oOBCpSQa2kRIURhv0A8fVP33-gu14338u.jpeg)
+![alt text](https://raw.githubusercontent.com/dasgourav/devsecops-airbus/master/Reports/DevSecOps_Tools.jpg)
 
-![alt text](https://hackernoon.com/images/gv93oOBCpSQa2kRIURhv0A8fVP33-2o1l3378.png)
+![alt text](https://raw.githubusercontent.com/dasgourav/devsecops-airbus/master/Reports/DevSecOps_Arch.png)
