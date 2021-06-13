@@ -1,16 +1,22 @@
-# Build DevSecOps Pipeline in AWS
+# Airbus DevSecOps Challenge
 
-The project includes an Amazon CloudFormation template to help provision resources to build DevSecOps Pipeline in AWS
+As told, I have used the following project [**DVA**](https://github.com/CSPF-Founder/JavaVulnerableLab/) (Damn Vulnerable Applications) project, which I found in OWASP Vulnerable Web Applications Directory and forked in here. 
 
-## License
+## Important Links
+[**Click Here**](https://github.com/dasgourav/devsecops-airbus/blob/master/CloudformationTemplate/Master-template-to-build-end-to-end-DevSecOps-pipeline.yaml) to check the **Cloudformation Master Template** which brings up the below Reference Architecture.
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
+[**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **SonarQube Dashboard**.
+
+[**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **SAST Report**.
+
+[**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **DAST Report**.
+
 
 ## Objective:
-Thus, the objective here is to demonstrate how DevSecOps works in reality. The following series split into two parts (refer below) with very simple and clear instructions to provision a CI/CD pipeline adhering to DevSecOps principles in AWS. [Click Here](https://hackernoon.com/connect-to-ec2-remote-systems-from-the-ansible-control-machine-using-aws-ssm-parameter-store-jt2k342k), to go through the Step-by-Step Tutorial. 
+Thus, the objective here is to demonstrate how to incorporate SAST, DAST and Code Quality in a DVA project to look for vulnerabilities and flag issues through an automated CI/CD pipeline on a Cloud Environment. I have used my [open-source project](https://hackernoon.com/devsecops-introduction-clear-instructions-on-how-to-build-a-pipeline-in-aws-part-1-5nx334e) to achieve this. 
 
 ## How Does it Work:
-The tutorial has used open-source tools to build the DevSecOps pipeline to make the demo more achievable. The below diagram depicts the tools and native services used along with the security control gates applied in the process.
+The tutorial has used open-source tools to build the DevSecOps pipeline to make the demo more achievable. The below diagram depicts the tools and native services used along with the security control gates applied in the process. Also, the reference diagram is provided below.
 
 ![alt text](https://hackernoon.com/images/gv93oOBCpSQa2kRIURhv0A8fVP33-gu14338u.jpeg)
 
