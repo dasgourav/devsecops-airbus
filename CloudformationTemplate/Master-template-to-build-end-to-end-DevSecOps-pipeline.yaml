@@ -1,0 +1,546 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+    Resources to build the entire AWS DevSecOps Pipeline to check of Vulnerabilities. 
+Parameters:
+  BranchName:
+    Description: GitHub branch name
+    Type: String
+    Default: master
+  RepositoryName:
+    Description: GitHub repository name
+    Type: String
+    Default: devsecops-airbus
+  GitHubOwner:
+    Type: String
+    Default: dasgourav
+  GitHubTOKEN:
+    Type: String
+    Description: >
+            Enter the Token generated to connect with Github
+    NoEcho: true    
+  InsiderCLIScore:
+    Type: String
+    Description: >
+            If the score set between 0 and 100 the exit code from Insider CLI will indicate if a vulnerability with a score equal to or higher was identified
+    Default: 20    
+  TechnologyStack:
+    Type: String
+    Description: >
+            Enter the TechnologyStack to Run Insider CLI for Vulnerabilities. Supported technologies: android, java, ios, javascript & csharp
+    Default: java
+    AllowedValues: [android, java, ios, javascript, csharp]
+  SONARQUBEURL:
+    Type: String
+    Description: >
+            Enter the Sonarqube URL e.g http://54.144.251.39:9000/. Note: Don't End the URL with a forward slash (/) or else it will throw an error 
+    Default: http://54.208.205.1:9000
+  SONARQUBETOKEN:
+    Type: String
+    Description: >
+            Enter the Token generated at the SonarQube Admin Portal.
+    NoEcho: true
+       
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+    - Label:
+        default: Code
+      Parameters:
+       - BranchName
+       - RepositoryName
+       - GitHubOwner
+       - GitHubTOKEN
+    - Label:
+        default: Insider-SAST-Tool-Parameters
+      Parameters:
+      - TechnologyStack
+      - InsiderCLIScore
+    - Label:
+        default: SonarQubeParameters
+      Parameters:
+      - SONARQUBEURL
+      - SONARQUBETOKEN
+    ParameterLabels:
+       RepositoryName:
+           default: Github Repository Name
+       BranchName:
+           default: Github Branch Name
+       GitHubOwner:
+           default: Github Owner Name
+       GitHubTOKEN:
+           default: Github Secret Token
+       TechnologyStack:
+           default: Insider CLI Technology Stack
+       SONARQUBEURL:
+           default: Sonarqube URL
+       SONARQUBETOKEN:
+           default: Sonarqube Auth-Token
+       InsiderCLIScore:
+           default: Insider CLI Score
+                  
+Resources:
+
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  CodebuildSASTCheck:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Cache:
+        Location: !Sub '${Bucket}/insider.zip'
+        Type: S3
+      BadgeEnabled: false
+      Name: SASTCheck
+      Description: This to run Insider CLI to do Static Application Security Testing (SAST)
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:2.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: TechnologyStack
+            Value: !Ref TechnologyStack
+          - Name: Insider_CLI_Score
+            Value: !Ref InsiderCLIScore                                 
+      ServiceRole: !Ref CodebuildRole
+      Source:
+        Type: CODEPIPELINE     
+        BuildSpec: PipelinesFiles/SAST_Buildspec.yaml
+
+  CodebuildSonarQubeCheck:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Cache:
+        Location: !Sub '${Bucket}/sonarqube.zip'
+        Type: S3
+      BadgeEnabled: false
+      Name: SonarQubeQualityCheck
+      Description: This is to run Sonarqube reviews with static analysis of code to detect bugs, code smells, and security vulnerabilities
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:2.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: SONARQUBE_URL
+            Value: !Ref SONARQUBEURL
+          - Name: SONARQUBE_TOKEN
+            Value: !Ref SONARQUBETOKEN
+          - Name: REPOSITORY_NAME
+            Value: !Ref RepositoryName                
+      ServiceRole: !Ref CodebuildRole
+      Source:
+        Type: CODEPIPELINE     
+        BuildSpec: PipelinesFiles/SonarQube_Buildspec.yaml
+
+  CodeBuildDASTScan:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE 
+      BadgeEnabled: false
+      Name: DASTCheck
+      Description: This is to run DAST Scan to look for vulnerabilities in web applications while they are running.
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:2.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: ALB_URL
+            Value: http://example.com                   
+      ServiceRole: !Ref CodebuildRole
+      Source:
+        Type: CODEPIPELINE 
+        BuildSpec: PipelinesFiles/DAST_Buildspec.yaml
+             
+  CodebuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: CodebuildRole-${AWS::StackName}    
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Effect: Allow
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: codebuild-service-role-devsecops-cicd
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:                
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketAcl
+                  - s3:GetBucketLocation
+                  - s3:ListBucket 
+                Resource:
+                  - !Sub
+                      - '${BucketArn}*'
+                      - BucketArn: !GetAtt Bucket.Arn
+
+  CodePipelineRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName:
+        Fn::Sub: CodePipelineRole-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      Policies:
+        -
+          PolicyName: "CodePipelineDevSecOpsAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:DeleteObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:ListBucket"
+                  - "s3:PutObject"
+                  - "s3:GetBucketPolicy"
+                Resource:
+                  - !Sub
+                      - '${BucketArn}*'
+                      - BucketArn: !GetAtt Bucket.Arn                    
+              -
+                Effect: "Allow"
+                Action:
+                  - "codebuild:StartBuild"
+                  - "codebuild:BatchGetBuilds"
+                Resource: 
+                 - !GetAtt CodebuildSASTCheck.Arn
+                 - !GetAtt CodebuildSonarQubeCheck.Arn
+                 - !GetAtt CodeBuildDASTScan.Arn              
+              -
+                Effect: "Allow"
+                Action:
+                  - "iam:PassRole"
+                Resource:
+                  - Fn::Sub: arn:aws:iam::${AWS::AccountId}:role/CloudFormationRole-${AWS::StackName}
+              -
+                Effect: "Allow"
+                Action:
+                  - "cloudformation:CreateChangeSet"
+                  - "cloudformation:CreateStack"
+                  - "cloudformation:CreateUploadBucket"
+                  - "cloudformation:DeleteStack"
+                  - "cloudformation:Describe*"
+                  - "cloudformation:List*"
+                  - "cloudformation:UpdateStack"
+                  - "cloudformation:ValidateTemplate"
+                  - "cloudformation:ExecuteChangeSet"
+                  - "cloudformation:DeleteChangeSet"
+                Resource:
+                  - Fn::Sub: arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/Pre-Prod-${AWS::StackName}*
+  CloudFormationRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName:
+        Fn::Sub: CloudFormationRole-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "cloudformation.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      Policies:
+        -
+          PolicyName: "CloudFormationDevSecOpsFCFNAccessPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:             
+              -
+                Effect: "Allow"
+                Action:
+                  - "ec2:Describe*"
+                  - "ec2:CreateSecurityGroup"
+                  - "autoscaling:Describe*"
+                  - "elasticloadbalancing:Describe*"
+                  - "elasticloadbalancing:CreateLoadBalancer"
+                  - "autoscaling:CreateAutoScalingGroup"
+                  - "autoscaling:CreateLaunchConfiguration"
+                Resource:
+                  - "*"
+              -
+                Effect: "Allow"
+                Action:
+                  - "ec2:AttachNetworkInterface"
+                  - "ec2:AttachVolume"
+                  - "ec2:AuthorizeSecurityGroupIngress"
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:CreateVolume"
+                  - "ec2:DeleteSecurityGroup"
+                  - "ec2:RevokeSecurityGroupIngress"
+                  - "ec2:RevokeSecurityGroupEgress"
+                  - "ec2:DeleteTags"
+                  - "ec2:DeleteVolume"
+                  - "ec2:DetachNetworkInterface"
+                  - "ec2:DetachVolume"
+                  - "ec2:MonitorInstances"
+                  - "ec2:RebootInstances"
+                  - "ec2:ReleaseAddress"
+                  - "ec2:RunInstances"
+                  - "ec2:StartInstances"
+                  - "ec2:StopInstances"
+                  - "ec2:TerminateInstances"
+                  - "ec2:UnmonitorInstances"
+                Resource:
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}::image/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+                  - Fn::Sub: arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+              -
+                Effect: "Allow"
+                Action:
+                  - "elasticloadbalancing:*"
+                Resource:
+                  - Fn::Sub: arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/app/WebELB*
+                  - Fn::Sub: arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:listener/app/WebELB*
+                  - Fn::Sub: arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:listener-rule/app/WebELB*
+                  - Fn::Sub: arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:targetgroup/Pre-P*
+              -
+                Effect: "Allow"
+                Action:
+                  - "autoscaling:*"
+                Resource:
+                  - Fn::Sub: arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/Pre-Prod-${AWS::StackName}-ServerGroup-*
+                  - Fn::Sub: arn:aws:autoscaling:${AWS::Region}:${AWS::AccountId}:launchConfiguration:*:launchConfigurationName/Pre-Prod-${AWS::StackName}-LaunchConfig-*
+              -
+                Effect: "Allow"
+                Action:
+                  - "s3:GetObject"
+                  - "s3:ListBucket"
+                Resource: 
+                  - !Sub
+                      - '${BucketArn}*'
+                      - BucketArn: !GetAtt Bucket.Arn
+              -
+                Effect: "Allow"
+                Action:
+                  - "ec2:CreateVpc"
+                  - "ec2:DeleteVpc" 
+                  - "ec2:CreateSubnet"
+                  - "ec2:DeleteSubnet"
+                  - "ec2:DescribeAvailabilityZones"
+                  - "ec2:CreateRouteTable"
+                  - "ec2:DeleteRouteTable"
+                  - "ec2:CreateRoute"
+                  - "ec2:DeleteRoute"
+                  - "ec2:CreateInternetGateway"
+                  - "ec2:DeleteInternetGateway"
+                  - "ec2:AttachInternetGateway"
+                  - "ec2:AssociateRouteTable"
+                  - "ec2:ModifyVpcAttribute"
+                  - "ec2:CreateTags"
+                  - "ec2:DeleteTags"
+                  - "ec2:DisassociateRouteTable"
+                  - "ec2:DetachInternetGateway"
+                  - "ssm:GetParameters"                  
+                Resource:
+                  - "*"                  
+              -
+                Effect: "Allow"
+                Action:
+                  - "ssm:GetParameters"
+                Resource: 
+                  - Fn::Sub: arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2       
+                                                                     
+  DeployPipelineWebhook:
+    Type: 'AWS::CodePipeline::Webhook'
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: !Ref GitHubTOKEN
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: 'refs/heads/{Branch}'
+      TargetPipeline: !Ref DeployPipeline
+      TargetAction: DevSecOps-Airbus-Sample-App
+      Name: DeployPipelineWebhook
+      TargetPipelineVersion: !GetAtt 
+        - DeployPipeline
+        - Version
+      RegisterWithThirdParty: true
+
+  DeployPipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      Name: DevSecOpsAWSPipeline
+      RoleArn:
+          Fn::GetAtt: [ CodePipelineRole, Arn ]
+      Stages:
+        -
+          Name: GitHubRepository
+          Actions:
+            -
+              Name: DevSecOps-Airbus-Sample-App
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                -
+                  Name: DevSecOps-Airbus-Sample-App-Output
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref RepositoryName
+                Branch: !Ref BranchName
+                OAuthToken: !Ref GitHubTOKEN
+                PollForSourceChanges: false
+              RunOrder: 1
+        -
+          Name: StaticCode-Security-Validation
+          Actions:
+            -
+              Name: SAST-Check
+              InputArtifacts:
+                - Name: DevSecOps-Airbus-Sample-App-Output 
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              OutputArtifacts:
+                -
+                  Name: SASTCheckArtifact
+              Configuration:
+                ProjectName:
+                  Ref: CodebuildSASTCheck
+              RunOrder: 1
+            -
+              Name: CodeQuality-Check
+              InputArtifacts:
+                - Name: DevSecOps-Airbus-Sample-App-Output
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              OutputArtifacts:
+                -
+                  Name: SonarQubeCheckArtifact
+              Configuration:
+                ProjectName:
+                  Ref: CodebuildSonarQubeCheck
+              RunOrder: 1              
+        -
+          Name: Pre-Prod
+          Actions:
+            -
+              Name: CreatePre-ProdChangeSet
+              InputArtifacts:
+                -
+                  Name: DevSecOps-Airbus-Sample-App-Output
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              OutputArtifacts:
+                -
+                  Name: CreatedPre-ProdChangeSet
+              Configuration:
+                ActionMode: CHANGE_SET_REPLACE
+                ChangeSetName: Pre-ProdCBChangeSet
+                RoleArn:
+                  Fn::GetAtt: [ CloudFormationRole, Arn ]
+                Capabilities: CAPABILITY_NAMED_IAM
+                StackName:
+                  Fn::Sub: Pre-Prod-${AWS::StackName}
+                TemplateConfiguration: DevSecOps-Airbus-Sample-App-Output::CloudformationTemplate/Main-Stack-Environment-Variables.json
+                TemplatePath: DevSecOps-Airbus-Sample-App-Output::CloudformationTemplate/Main-Stack-triggered-through-AWS-CodePipeline.yml
+              RunOrder: 1
+            -
+              Name: ExecutePre-ProdChangeSet
+              InputArtifacts:
+                -
+                  Name: CreatedPre-ProdChangeSet
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              OutputArtifacts:
+                -
+                  Name: DeployedPre-Prod
+              Configuration:
+                ActionMode: CHANGE_SET_EXECUTE
+                ChangeSetName: Pre-ProdCBChangeSet
+                StackName:
+                  Fn::Sub: Pre-Prod-${AWS::StackName}
+              Namespace: CloudFromationDeployNamespace    
+              RunOrder: 2
+            -
+              Name: DAST-Check
+              InputArtifacts:
+                -
+                  Name: DevSecOps-Airbus-Sample-App-Output
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              OutputArtifacts:
+                -
+                  Name: DASTScanArtifact
+              Configuration:
+                ProjectName: !Ref CodeBuildDASTScan
+                EnvironmentVariables: '[{"name":"ALB_URL","value":"#{CloudFromationDeployNamespace.URL}","type":"PLAINTEXT"}]'          
+              RunOrder: 3              
+            -
+              Name: Prod-Approval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Version: 1
+                Provider: Manual
+              RunOrder: 4             
+      ArtifactStore:
+        Type: S3
+        Location:
+          Ref: Bucket
