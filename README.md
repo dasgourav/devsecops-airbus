@@ -5,11 +5,11 @@ As told, I have used the following project [**DVA**](https://github.com/CSPF-Fou
 ## Important Links
 [**Click Here**](https://github.com/dasgourav/devsecops-airbus/blob/master/CloudformationTemplate/Master-template-to-build-end-to-end-DevSecOps-pipeline.yaml) to check the **Cloudformation Master Template** which brings up the below Reference Architecture.
 
-[**Click Here**](http://54.208.205.1:9000/dashboard/index/devsecops-airbus) to open the **SonarQube Dashboard**.
+[**Click Here**](http://3.143.136.85:9000/overview?id=devsecops-airbus) to open the **SonarQube Dashboard**.
 
-[**Click Here**](https://automationking.s3.amazonaws.com/report-20210613184356.html) to open the **SAST Report**.
+[**Click Here**](https://automationking.s3.amazonaws.com/report-20210614060829.html) to open the **SAST Report**.
 
-[**Click Here**](https://automationking.s3.amazonaws.com/1623610969.xhtml) to open the **DAST Report**.
+[**Click Here**](https://automationking.s3.amazonaws.com/1623651319.xhtml) to open the **DAST Report**.
 
 
 ## Objective:
